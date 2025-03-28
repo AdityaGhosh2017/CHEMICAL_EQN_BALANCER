@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chemical Equation Balancer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 550px;
+            text-align: center;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 25px;
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .instructions {
+            background: #ecf0f1;
+            color: #34495e;
+            font-size: 15px;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            line-height: 1.5;
+            text-align: left;
+    }
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .input-group {
+            margin-bottom: 25px;
+        }
+
+        input {
+            width: 85%;
+            padding: 14px;
+            border: 2px solid #bdc3c7;
+            border-radius: 30px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            background: #f9fbfc;
+        }
+
+        input:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 8px rgba(52, 152, 219, 0.3);
+        }
+
+        button {
+            padding: 14px 30px;
+            background: #2980b9;
+            color: #ffffff;
+            border: none;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s, box-shadow 0.3s;
+        }
+
+        button:hover {
+            background: #e74c3c;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        #result {
+            margin-top: 25px;
+            font-size: 18px;
+            color: #2c3e50;
+            word-wrap: break-word;
+            font-weight: 500;
+        }
+
+        .status {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CHEMICAL EQUATION BALANCER</h1>
+        <div class="instructions">
+            <strong style="text-decoration: underline;">INSTRUCTIONS FOR FEEDING DATA INTO THE PROGRAM</strong>
+            <br>
+            <br>
+            <strong>1. LHS & RHS OF THE EQUATION SHOULD BE SEPERATED BY COMMA(=).</strong>
+            <br>
+            <strong>2. NO SPACE TO BE PROVIDED.</strong>
+            <br>
+            <strong>3. THE EQUATION SHOULD BE ENTIRELY UNBALANCED.</strong><br>
+        </div>
+        <div class="input-group">
+            <input type="text" id="equation" placeholder="example: C+O2=CO2" autocomplete="off">
+        </div>
+        <button onclick="balanceEquation()">Balance Equation</button>
+        <div id="result"></div>
+        <div class="status" id="status"></div>
+    </div>
+
+    <!-- Load Pyodide -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
+    <script>
+        let pyodide;
+
+        // Load Pyodide and SymPy
+        async function loadPyodideAndPackages() {
+            pyodide = await loadPyodide();
+            await pyodide.loadPackage('sympy');
+            console.log('Pyodide and SymPy loaded');
+        }
+
+        // Original Python code as a string (unchanged syntax)
+        const pythonCode = `
+from sympy import *
+import string
+
+print("INSTRUCTIONS FOR FEEDING DATA INTO THE PROGRAM\\n")
+print("1. Enter the equation having the LHS & RHS seperated by '='.\\n")
+print("2. There shouldn't be any space within the limits of the equation to be entered.\\n")
+print("3. The equation should be entirely UNBLANCED, the program will throw error on the account when half-balanced equation had been entered.\\n\\n")
+string_input = input("Enter Completely Unbalanced Chemical Equation (e.g., C+O2=CO2):\\n")
+
+map = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+print("\\nEntered/Unbalanced Equation is:", string_input.translate(map))
+print("\\nPROCESSING.....PLEASE WAIT FOR FEW SECONDS.\\n")
+
+rec_string = string_input.partition("=")
+inp_reactant = len(rec_string[0].split("+"))
+temp_string = string_input.replace("=", "+")
+list1 = temp_string.split("+")
+
+list_coefficient_symbol = []
+for i, letter in enumerate(string.ascii_lowercase[:len(list1)]):
+    globals()[letter] = symbols(letter)
+    list_coefficient_symbol.append(globals()[letter])
+
+list_key = []
+dict_chem = [dict() for _ in range(len(list1))]
+
+for m, formula in enumerate(list1):
+    length = len(formula)
+    dict_chem[m] = {}
+    
+    ele_brac_start = formula.find("(")
+    ele_brac_stop = formula.find(")")
+    
+    if ele_brac_start != -1 and ele_brac_stop != -1:
+        bracket_mult = 1
+        if ele_brac_stop + 1 < length and formula[ele_brac_stop + 1].isnumeric():
+            bracket_mult = int(formula[ele_brac_stop + 1])
+        
+        i = ele_brac_start + 1
+        while i < ele_brac_stop:
+            if formula[i].isupper():
+                element = formula[i]
+                num = ""
+                i += 1
+                if i < ele_brac_stop and formula[i].islower():
+                    element += formula[i]
+                    i += 1
+                if i < ele_brac_stop and formula[i].isnumeric():
+                    num = formula[i]
+                    i += 1
+                    while i < ele_brac_stop and formula[i].isnumeric():
+                        num += formula[i]
+                        i += 1
+                count = int(num) if num else 1
+                dict_chem[m][element] = dict_chem[m].get(element, 0) + count * bracket_mult
+                list_key.append(element)
+            else:
+                i += 1
+
+    i = 0
+    while i < length:
+        if i == ele_brac_start:
+            i = ele_brac_stop + 1
+            if i < length and formula[i].isnumeric():
+                i += 1
+            continue
+        if formula[i].isupper():
+            element = formula[i]
+            num = ""
+            i += 1
+            if i < length and formula[i].islower():
+                element += formula[i]
+                i += 1
+            if i < length and formula[i].isnumeric():
+                num = formula[i]
+                i += 1
+                while i < length and formula[i].isnumeric():
+                    num += formula[i]
+                    i += 1
+            count = int(num) if num else 1
+            dict_chem[m][element] = dict_chem[m].get(element, 0) + count
+            list_key.append(element)
+        else:
+            i += 1
+
+list_key_final = list(set(list_key))
+
+complete_list_coe = []
+for element in list_key_final:
+    coeff_list = []
+    for m in range(len(list1)):
+        count = dict_chem[m].get(element, 0)
+        coeff_list.append(count if m < inp_reactant else -count)
+    coeff_list.append(0)
+    complete_list_coe.append(coeff_list)
+
+list_ini_eq = [1] + [0] * (len(list1) - 1) + [1]
+complete_list_coe.insert(0, list_ini_eq)
+
+system = Matrix(complete_list_coe)
+sol = solve_linear_system(system, *list_coefficient_symbol)
+
+if sol is None:
+    print("Error: Unable to balance the equation")
+    exit()
+
+list_dem_extract = [fraction(x)[1] for x in sol.values()]
+lcm_val = lcm(list_dem_extract)
+list_lcm = [x * lcm_val for x in sol.values()]
+hcf = gcd(list_lcm)
+
+final_coeffs = []
+for coeff in sol.values():
+    final_val = (coeff * lcm_val) / hcf if hcf != 1 else coeff * lcm_val
+    final_coeffs.append(int(final_val))
+
+list_pre = []
+for coeff, term in zip(final_coeffs, list1):
+    formatted_term = term.translate(map) if coeff == 1 else f"{coeff}{term.translate(map)}"
+    list_pre.append(formatted_term)
+
+result = list_pre[0]
+for i in range(1, len(list_pre)):
+    if i == inp_reactant:
+        result += " = "
+    else:
+        result += " + "
+    result += list_pre[i]
+
+print("OUTPUT\\nBalanced Equation is:", result)
+`;
+
+        // Modified Python code to work as a function
+        const pythonFunctionCode = `
+from sympy import *
+import string
+
+def balance_equation(string_input):
+    map = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+    rec_string = string_input.partition("=")
+    inp_reactant = len(rec_string[0].split("+"))
+    temp_string = string_input.replace("=", "+")
+    list1 = temp_string.split("+")
+
+    list_coefficient_symbol = []
+    for i, letter in enumerate(string.ascii_lowercase[:len(list1)]):
+        globals()[letter] = symbols(letter)
+        list_coefficient_symbol.append(globals()[letter])
+
+    list_key = []
+    dict_chem = [dict() for _ in range(len(list1))]
+
+    for m, formula in enumerate(list1):
+        length = len(formula)
+        dict_chem[m] = {}
+        
+        ele_brac_start = formula.find("(")
+        ele_brac_stop = formula.find(")")
+        
+        if ele_brac_start != -1 and ele_brac_stop != -1:
+            bracket_mult = 1
+            if ele_brac_stop + 1 < length and formula[ele_brac_stop + 1].isnumeric():
+                bracket_mult = int(formula[ele_brac_stop + 1])
+            
+            i = ele_brac_start + 1
+            while i < ele_brac_stop:
+                if formula[i].isupper():
+                    element = formula[i]
+                    num = ""
+                    i += 1
+                    if i < ele_brac_stop and formula[i].islower():
+                        element += formula[i]
+                        i += 1
+                    if i < ele_brac_stop and formula[i].isnumeric():
+                        num = formula[i]
+                        i += 1
+                        while i < ele_brac_stop and formula[i].isnumeric():
+                            num += formula[i]
+                            i += 1
+                    count = int(num) if num else 1
+                    dict_chem[m][element] = dict_chem[m].get(element, 0) + count * bracket_mult
+                    list_key.append(element)
+                else:
+                    i += 1
+
+        i = 0
+        while i < length:
+            if i == ele_brac_start:
+                i = ele_brac_stop + 1
+                if i < length and formula[i].isnumeric():
+                    i += 1
+                continue
+            if formula[i].isupper():
+                element = formula[i]
+                num = ""
+                i += 1
+                if i < length and formula[i].islower():
+                    element += formula[i]
+                    i += 1
+                if i < length and formula[i].isnumeric():
+                    num = formula[i]
+                    i += 1
+                    while i < length and formula[i].isnumeric():
+                        num += formula[i]
+                        i += 1
+                count = int(num) if num else 1
+                dict_chem[m][element] = dict_chem[m].get(element, 0) + count
+                list_key.append(element)
+            else:
+                i += 1
+
+    list_key_final = list(set(list_key))
+
+    complete_list_coe = []
+    for element in list_key_final:
+        coeff_list = []
+        for m in range(len(list1)):
+            count = dict_chem[m].get(element, 0)
+            coeff_list.append(count if m < inp_reactant else -count)
+        coeff_list.append(0)
+        complete_list_coe.append(coeff_list)
+
+    list_ini_eq = [1] + [0] * (len(list1) - 1) + [1]
+    complete_list_coe.insert(0, list_ini_eq)
+
+    system = Matrix(complete_list_coe)
+    sol = solve_linear_system(system, *list_coefficient_symbol)
+
+    if sol is None:
+        return "Error: Unable to balance the equation"
+
+    list_dem_extract = [fraction(x)[1] for x in sol.values()]
+    lcm_val = lcm(list_dem_extract)
+    list_lcm = [x * lcm_val for x in sol.values()]
+    hcf = gcd(list_lcm)
+
+    final_coeffs = []
+    for coeff in sol.values():
+        final_val = (coeff * lcm_val) / hcf if hcf != 1 else coeff * lcm_val
+        final_coeffs.append(int(final_val))
+
+    list_pre = []
+    for coeff, term in zip(final_coeffs, list1):
+        formatted_term = term.translate(map) if coeff == 1 else f"{coeff}{term.translate(map)}"
+        list_pre.append(formatted_term)
+
+    result = list_pre[0]
+    for i in range(1, len(list_pre)):
+        if i == inp_reactant:
+            result += " = "
+        else:
+            result += " + "
+        result += list_pre[i]
+
+    return result
+`;
+
+        // Initialize Pyodide on page load
+        loadPyodideAndPackages().then(() => {
+            pyodide.runPython(pythonFunctionCode); //  // Load the Python function into Pyodide
+            console.log('Pyodide and SymPy loaded');
+            document.getElementById('status').textContent = 'Ready';
+        });
+
+        // Balance the equation using Pyodide
+        async function balanceEquation() {
+            const input = document.getElementById('equation').value.trim();
+            const status = document.getElementById('status');
+            const result = document.getElementById('result');
+
+            status.textContent = 'Processing...';
+            result.textContent = '';
+
+            if (!input || !input.includes('=')) {
+                status.textContent = 'Ready';
+                result.textContent = 'Error: Please enter a valid equation with "="';
+                return;
+            }
+
+            if (!pyodide) {
+                status.textContent = 'Ready';
+                result.textContent = 'Error: Pyodide not loaded yet, please wait...';
+                return;
+            }
+
+            try {
+                const output = pyodide.runPython(`balance_equation("${input}")`);
+                status.textContent = 'Ready';
+                result.textContent = output.startsWith('Error') ? output : `Balanced Equation: ${output}`;
+            } catch (error) {
+                status.textContent = 'Ready';
+                result.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Trigger balance on Enter key
+        document.getElementById('equation').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') balanceEquation();
+        });
+    </script>
+</body>
+</html>
